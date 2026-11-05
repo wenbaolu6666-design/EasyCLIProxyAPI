@@ -746,15 +746,14 @@ fn read_zcode_database(path: &Path, delta: &mut FileDelta) -> Result<(), ()> {
 
     let mut statement = connection
         .prepare(
-            "SELECT started_at, coalesce(model_id, 'unknown'), "
-            .to_owned()
-            + "coalesce(input_tokens, 0), coalesce(output_tokens, 0), "
-            + "coalesce(cache_read_input_tokens, 0), coalesce(cache_creation_input_tokens, 0), "
-            + "coalesce(reasoning_tokens, 0), coalesce(computed_total_tokens, 0) "
-            + "FROM model_usage "
-            + "WHERE lower(coalesce(provider_id, '')) NOT LIKE 'account:%' "
-            + "  AND lower(coalesce(provider_id, '')) NOT LIKE 'official%' "
-            + "ORDER BY started_at ASC",
+            "SELECT started_at, coalesce(model_id, 'unknown'), \
+                    coalesce(input_tokens, 0), coalesce(output_tokens, 0), \
+                    coalesce(cache_read_input_tokens, 0), coalesce(cache_creation_input_tokens, 0), \
+                    coalesce(reasoning_tokens, 0), coalesce(computed_total_tokens, 0) \
+             FROM model_usage \
+             WHERE lower(coalesce(provider_id, '')) NOT LIKE 'account:%' \
+               AND lower(coalesce(provider_id, '')) NOT LIKE 'official%' \
+             ORDER BY started_at ASC",
         )
         .map_err(|_| ())?;
 
@@ -1904,7 +1903,7 @@ mod tests {
         let v2 = home.join(".zcode").join("v2");
         fs::create_dir_all(&v2).unwrap();
         let custom = test_directory("zcode-custom");
-        let custom_str = custom.to_string_lossy().replace('\\', '\\\\');
+        let custom_str = custom.to_string_lossy().replace(r#"\"#, r#"\\"#);
         fs::write(
             v2.join("setting.json"),
             format!(r#"{{"dataBaseDir": "{custom_str}"}}"#),
