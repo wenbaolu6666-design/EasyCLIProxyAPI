@@ -375,11 +375,9 @@ pub(crate) fn source_files(home: &Path, source: &str) -> Vec<PathBuf> {
         "zcode" => {
             if let Some(custom) = env_directory("ZCODE_DATA_BASE_DIR") {
                 roots.push(custom.join(".zcode").join("cli").join("db"));
-                roots.push(custom.join(".zcode"));
             }
             if let Some(custom_dir) = read_zcode_custom_data_dir(home) {
                 roots.push(custom_dir.join(".zcode").join("cli").join("db"));
-                roots.push(custom_dir.join(".zcode"));
             }
             roots.push(home.join(".zcode").join("cli").join("db"));
             roots.push(home.join(".zcode").join("sessions"));
