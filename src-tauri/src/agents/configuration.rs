@@ -4013,15 +4013,10 @@ pub(crate) fn build_zcode_agent_config(
             Some(entries) => prune(entries),
             None => model_names.iter().map(|name| (*name).to_string()).collect(),
         };
-        let mut model_order = match provider_config.get("modelOrder").and_then(serde_json::Value::as_array) {
+        let model_order = match provider_config.get("modelOrder").and_then(serde_json::Value::as_array) {
             Some(entries) => prune(entries),
             None => model_names.iter().map(|name| (*name).to_string()).collect(),
         };
-        for name in &model_names {
-            if !model_order.iter().any(|existing| existing == name) {
-                model_order.push((*name).to_string());
-            }
-        }
         provider_config.insert("personalModelIds".to_string(), serde_json::json!(personal_model_ids));
         provider_config.insert("modelOrder".to_string(), serde_json::json!(model_order));
     }
