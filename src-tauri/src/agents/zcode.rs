@@ -539,14 +539,9 @@ pub(crate) fn save_zcode_editor(
     let managed_obj = managed.as_object_mut().ok_or("ZCode managed provider must be an object")?;
     let provider_cfg = ensure_json_object_entry(managed_obj, "config");
 
-    let requested_ids = request.models.iter().map(|model| model.id.as_str())
-        .collect::<std::collections::HashSet<_>>();
-    let mut enabled_ids: Vec<Value> = request.models.iter().filter(|m| m.enabled).map(|m| serde_json::json!(m.id)).collect();
-    if let Some(existing_ids) = provider_cfg.get("personalModelIds").and_then(Value::as_array) {
-        enabled_ids.extend(existing_ids.iter().filter(|id| {
-            id.as_str().map(|id| !requested_ids.contains(id)).unwrap_or(false)
-        }).cloned());
-    }
+    // The request carries the complete current catalog, so ids that are not
+    // part of it are disabled or deleted models and must not be kept alive.
+    let enabled_ids: Vec<Value> = request.models.iter().filter(|m| m.enabled).map(|m| serde_json::json!(m.id)).collect();
     provider_cfg.insert("personalModelIds".into(), Value::Array(enabled_ids));
     let order_ids: Vec<Value> = request.model_order.iter().map(|id| serde_json::json!(id)).collect();
     provider_cfg.insert("modelOrder".into(), Value::Array(order_ids));
