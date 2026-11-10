@@ -1578,6 +1578,31 @@ fn zcode_agent_config_replaces_zero_max_output_tokens_on_manual_rules() {
 }
 
 #[test]
+fn zcode_agent_config_prunes_removed_models_from_provider_lists() {
+    // Disabled or deleted gateway models vanish from /v1/models but used to
+    // stay in personalModelIds/modelOrder forever, so ZCode kept listing them.
+    let models = test_agent_models(&["live-a", "live-b"]);
+    let existing = r#"{"schemaVersion":1,"config":{"providerConfigRules":{"providerRules":[{"providerId":"cpa-gui","providerName":"EasyCLIProxyAPI","enabled":true,"config":{"group":"standard-personal","access":{"type":"api-key","apiKey":"old"},"api":{"type":"anthropic-messages","baseUrl":"http://127.0.0.1:8317/v1"},"personalModelIds":["live-a","gone-b"],"modelOrder":["gone-b","live-a"]}}]},"modelConfigRules":{"providerModelRules":[],"manualProviderModelRules":[]}}}"#;
+    let rendered = build_zcode_agent_config(
+        Some(existing),
+        "http://127.0.0.1:8317/v1",
+        DEFAULT_API_KEY,
+        "live-a",
+        &models,
+    )
+    .unwrap();
+    let value: serde_json::Value = serde_json::from_str(&rendered).unwrap();
+    let provider = value["config"]["providerConfigRules"]["providerRules"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|rule| rule["providerId"] == "cpa-gui")
+        .unwrap();
+    assert_eq!(provider["config"]["modelOrder"], serde_json::json!(["live-a", "live-b"]));
+    assert_eq!(provider["config"]["personalModelIds"], serde_json::json!(["live-a"]));
+}
+
+#[test]
 fn zcode_desktop_and_cli_share_the_provider_configuration() {
     let home = agent_test_home("zcode-shared-provider-config");
     let paths = agent_config_paths(AgentClient::ZCode, &home);

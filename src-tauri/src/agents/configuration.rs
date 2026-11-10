@@ -3998,8 +3998,33 @@ pub(crate) fn build_zcode_agent_config(
     api.insert("baseUrl".to_string(), serde_json::json!(base_url));
     let ordered = ordered_agent_models(available_models, model);
     let model_names = ordered.iter().map(|option| option.name.as_str()).collect::<Vec<_>>();
-    provider_config.entry("personalModelIds").or_insert_with(|| serde_json::json!(model_names));
-    provider_config.entry("modelOrder").or_insert_with(|| serde_json::json!(model_names));
+    if !model_names.is_empty() {
+        // Models removed or disabled in the gateway disappear from
+        // /v1/models, but the previous provider lists kept their ids forever
+        // and ZCode kept showing these dead entries. Prune both lists to the
+        // models that still exist; keep user order and user-disabled models.
+        let available = model_names.iter().copied().collect::<std::collections::HashSet<_>>();
+        let prune = |entries: &[serde_json::Value]| -> Vec<String> {
+            entries.iter().filter_map(serde_json::Value::as_str)
+                .filter(|name| available.contains(*name))
+                .map(String::from).collect()
+        };
+        let personal_model_ids = match provider_config.get("personalModelIds").and_then(serde_json::Value::as_array) {
+            Some(entries) => prune(entries),
+            None => model_names.iter().map(|name| (*name).to_string()).collect(),
+        };
+        let mut model_order = match provider_config.get("modelOrder").and_then(serde_json::Value::as_array) {
+            Some(entries) => prune(entries),
+            None => model_names.iter().map(|name| (*name).to_string()).collect(),
+        };
+        for name in &model_names {
+            if !model_order.iter().any(|existing| existing == name) {
+                model_order.push((*name).to_string());
+            }
+        }
+        provider_config.insert("personalModelIds".to_string(), serde_json::json!(personal_model_ids));
+        provider_config.insert("modelOrder".to_string(), serde_json::json!(model_order));
+    }
     rules.retain(|rule| {
         rule.get("providerId").and_then(serde_json::Value::as_str)
             != Some(MANAGED_AGENT_PROVIDER_ID)
