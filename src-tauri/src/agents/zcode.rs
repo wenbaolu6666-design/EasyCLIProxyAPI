@@ -561,6 +561,8 @@ pub(crate) fn save_zcode_editor(
 
     // The request carries the complete current catalog, so ids that are not
     // part of it are disabled or deleted models and must not be kept alive.
+    let requested_ids = request.models.iter().map(|model| model.id.as_str())
+        .collect::<std::collections::HashSet<_>>();
     let enabled_ids: Vec<Value> = request.models.iter().filter(|m| m.enabled).map(|m| serde_json::json!(m.id)).collect();
     provider_cfg.insert("personalModelIds".into(), Value::Array(enabled_ids));
     let order_ids: Vec<Value> = request.model_order.iter().map(|id| serde_json::json!(id)).collect();
