@@ -1578,6 +1578,21 @@ fn zcode_agent_config_replaces_zero_max_output_tokens_on_manual_rules() {
 }
 
 #[test]
+fn zcode_reasoning_levels_are_deduplicated_and_trimmed() {
+    let levels = vec![
+        "low".to_string(),
+        " low ".to_string(),
+        String::new(),
+        "high".to_string(),
+        "low".to_string(),
+    ];
+    assert_eq!(
+        crate::agents::zcode::sanitize_reasoning_levels(&levels),
+        vec!["low".to_string(), "high".to_string()]
+    );
+}
+
+#[test]
 fn zcode_agent_config_prunes_removed_models_from_provider_lists() {
     // Disabled or deleted gateway models vanish from /v1/models but used to
     // stay in personalModelIds/modelOrder forever, so ZCode kept listing them.
