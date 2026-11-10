@@ -656,3 +656,5 @@ jobs:
             fi
           done < "$RUNNER_TEMP/miaomiao-assets.tsv"
           echo "[Download Miaomiao Preview](https://github.com/$GH_REPO/releases/tag/$RELEASE_TAG) — $SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+# ci-registration-retry
