@@ -118,6 +118,21 @@ pub(crate) const ZCODE_CPA_REASONING_MAP: &str = "reasoningLevel == \"none\" || 
 /// provider config and makes ZCode discard every custom provider in memory.
 pub(crate) const ZCODE_MANUAL_MAX_OUTPUT_TOKENS_FALLBACK: u64 = 128_000;
 
+/// ZCode rejects `reasoningLevel.values` when it is empty, contains blank
+/// entries or repeats a level, so normalize before rendering a rule.
+pub(crate) fn sanitize_reasoning_levels(levels: &[String]) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut sanitized = Vec::with_capacity(levels.len());
+    for level in levels {
+        let level = level.trim();
+        if level.is_empty() || !seen.insert(level.to_string()) {
+            continue;
+        }
+        sanitized.push(level.to_string());
+    }
+    sanitized
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ZCodeModelConfig {
@@ -260,14 +275,19 @@ fn build_zcode_rule_object(model_id: &str, config: &ZCodeModelConfig, existing: 
     if invalid_max {
         option_specs.remove("maxOutputTokens");
     }
-    let mut rl = option_specs.get("reasoningLevel").and_then(Value::as_object).cloned().unwrap_or_default();
-    rl.insert("values".into(), serde_json::json!(config.reasoning_levels));
-    if let Some(ref m) = config.reasoning_map {
-        rl.insert("map".into(), serde_json::json!(m));
+    let reasoning_levels = sanitize_reasoning_levels(&config.reasoning_levels);
+    if reasoning_levels.is_empty() {
+        option_specs.remove("reasoningLevel");
     } else {
-        rl.insert("map".into(), serde_json::json!(ZCODE_CPA_REASONING_MAP));
+        let mut rl = option_specs.get("reasoningLevel").and_then(Value::as_object).cloned().unwrap_or_default();
+        rl.insert("values".into(), serde_json::json!(reasoning_levels));
+        if let Some(ref m) = config.reasoning_map {
+            rl.insert("map".into(), serde_json::json!(m));
+        } else {
+            rl.insert("map".into(), serde_json::json!(ZCODE_CPA_REASONING_MAP));
+        }
+        option_specs.insert("reasoningLevel".into(), Value::Object(rl));
     }
-    option_specs.insert("reasoningLevel".into(), Value::Object(rl));
 
     cfg.insert("properties".into(), Value::Object(properties));
     if !option_specs.is_empty() {
