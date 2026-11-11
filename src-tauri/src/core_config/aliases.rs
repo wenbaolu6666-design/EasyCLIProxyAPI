@@ -1,100 +1,52 @@
 use super::*;
 use std::collections::BTreeSet;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct OAuthAliasChannel {
-    pub(crate) key: &'static str,
-    pub(crate) provider: &'static str,
-    pub(crate) kind: &'static str,
-    pub(crate) protocol: &'static str,
+    pub(crate) key: String,
+    pub(crate) provider: String,
+    pub(crate) kind: String,
+    pub(crate) protocol: String,
     pub(crate) supports_reasoning: bool,
     pub(crate) supports_fast: bool,
     pub(crate) force_mapping: bool,
 }
 
-pub(crate) const OAUTH_ALIAS_CHANNELS: [OAuthAliasChannel; 9] = [
-    OAuthAliasChannel {
-        key: "vertex",
-        provider: "Vertex OAuth",
-        kind: "vertex-oauth",
-        protocol: "gemini",
-        supports_reasoning: true,
-        supports_fast: false,
-        force_mapping: false,
-    },
-    OAuthAliasChannel {
-        key: "aistudio",
-        provider: "AI Studio OAuth",
-        kind: "aistudio-oauth",
-        protocol: "gemini",
-        supports_reasoning: true,
-        supports_fast: false,
-        force_mapping: false,
-    },
-    OAuthAliasChannel {
-        key: "antigravity",
-        provider: "Antigravity OAuth",
-        kind: "antigravity-oauth",
-        protocol: "antigravity",
-        supports_reasoning: true,
-        supports_fast: false,
-        force_mapping: true,
-    },
-    OAuthAliasChannel {
-        key: "claude",
-        provider: "Claude OAuth",
-        kind: "claude-oauth",
-        protocol: "claude",
-        supports_reasoning: true,
-        supports_fast: false,
-        force_mapping: false,
-    },
-    OAuthAliasChannel {
-        key: "codex",
-        provider: "Codex OAuth",
-        kind: "codex-oauth",
-        protocol: "codex",
-        supports_reasoning: true,
-        supports_fast: true,
-        force_mapping: false,
-    },
-    OAuthAliasChannel {
-        key: "kimi",
-        provider: "Kimi OAuth",
-        kind: "kimi-oauth",
-        protocol: "openai",
-        supports_reasoning: true,
-        supports_fast: false,
-        force_mapping: false,
-    },
-    OAuthAliasChannel {
-        key: "devin",
-        provider: "Devin OAuth",
-        kind: "devin-oauth",
-        protocol: "interactions",
-        supports_reasoning: false,
-        supports_fast: false,
-        force_mapping: false,
-    },
-    OAuthAliasChannel {
-        key: "xai",
-        provider: "xAI OAuth",
-        kind: "xai-oauth",
-        protocol: "codex",
-        supports_reasoning: true,
-        supports_fast: false,
-        force_mapping: false,
-    },
-    OAuthAliasChannel {
-        key: "meta",
-        provider: "Meta OAuth",
-        kind: "meta-oauth",
-        protocol: "openai",
-        supports_reasoning: false,
-        supports_fast: false,
-        force_mapping: false,
-    },
-];
+impl OAuthAliasChannel {
+    fn new(
+        key: &str,
+        provider: &str,
+        kind: &str,
+        protocol: &str,
+        supports_reasoning: bool,
+        supports_fast: bool,
+        force_mapping: bool,
+    ) -> Self {
+        Self {
+            key: key.to_string(),
+            provider: provider.to_string(),
+            kind: kind.to_string(),
+            protocol: protocol.to_string(),
+            supports_reasoning,
+            supports_fast,
+            force_mapping,
+        }
+    }
+}
+
+pub(crate) fn oauth_alias_channels() -> Vec<OAuthAliasChannel> {
+    vec![
+        OAuthAliasChannel::new("vertex", "Vertex OAuth", "vertex-oauth", "gemini", true, false, false),
+        OAuthAliasChannel::new("aistudio", "AI Studio OAuth", "aistudio-oauth", "gemini", true, false, false),
+        OAuthAliasChannel::new("antigravity", "Antigravity OAuth", "antigravity-oauth", "antigravity", true, false, true),
+        OAuthAliasChannel::new("claude", "Claude OAuth", "claude-oauth", "claude", true, false, false),
+        OAuthAliasChannel::new("codex", "Codex OAuth", "codex-oauth", "codex", true, true, false),
+        OAuthAliasChannel::new("kimi", "Kimi OAuth", "kimi-oauth", "openai", true, false, false),
+        OAuthAliasChannel::new("devin", "Devin OAuth", "devin-oauth", "interactions", false, false, false),
+        OAuthAliasChannel::new("xai", "xAI OAuth", "xai-oauth", "codex", true, false, false),
+        OAuthAliasChannel::new("meta", "Meta OAuth", "meta-oauth", "openai", false, false, false),
+    ]
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct OAuthModelDefinitions {
@@ -110,29 +62,60 @@ pub(crate) enum AliasSourceCapability {
 }
 
 pub(crate) fn oauth_alias_channel(channel: &str) -> Option<OAuthAliasChannel> {
-    OAUTH_ALIAS_CHANNELS
-        .iter()
-        .copied()
+    let channel = channel.trim();
+    oauth_alias_channels()
+        .into_iter()
         .find(|candidate| candidate.key.eq_ignore_ascii_case(channel))
+        .or_else(|| plugin_oauth_alias_channel(channel))
+}
+
+/// Plugin OAuth providers use their own provider key as the alias channel.
+/// Built-in aliases take precedence; anything else must look like a safe provider key.
+pub(crate) fn plugin_oauth_alias_channel(channel: &str) -> Option<OAuthAliasChannel> {
+    let key = normalize_plugin_oauth_alias_channel_key(channel)?;
+    Some(OAuthAliasChannel {
+        provider: format!("{key} OAuth"),
+        kind: format!("{key}-oauth"),
+        protocol: String::new(),
+        key,
+        supports_reasoning: true,
+        supports_fast: false,
+        force_mapping: false,
+    })
+}
+
+pub(crate) fn normalize_plugin_oauth_alias_channel_key(value: &str) -> Option<String> {
+    let key = value.trim().to_ascii_lowercase().replace('_', "-");
+    if key.is_empty() || key == "gemini" || key == "auth" {
+        return None;
+    }
+    if !key
+        .chars()
+        .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || matches!(ch, '-' | '.'))
+    {
+        return None;
+    }
+    if oauth_alias_channels()
+        .iter()
+        .any(|candidate| candidate.key.eq_ignore_ascii_case(&key))
+    {
+        return None;
+    }
+    Some(key)
 }
 
 pub(crate) fn oauth_alias_channel_details(channel: &str) -> (String, String, String) {
-    oauth_alias_channel(channel)
-        .map(|details| {
-            (
-                details.provider.to_string(),
-                details.kind.to_string(),
-                details.protocol.to_string(),
-            )
-        })
-        .unwrap_or_else(|| {
+    match oauth_alias_channel(channel) {
+        Some(details) => (details.provider, details.kind, details.protocol),
+        None => {
             let channel = channel.trim().to_ascii_lowercase();
             (
                 format!("{channel} OAuth"),
                 format!("{channel}-oauth"),
                 channel,
             )
-        })
+        }
+    }
 }
 
 pub(crate) fn normalize_oauth_alias_channel(value: &str) -> Option<&'static str> {
@@ -1273,7 +1256,7 @@ pub(crate) fn ensure_claude_desktop_model_alias(
         remove_existing_claude_model_alias(root, alias)?;
         append_managed_oauth_model_alias(
             root,
-            definition.channel.key,
+            &definition.channel.key,
             source_model,
             alias,
             definition.channel.force_mapping,
@@ -1664,6 +1647,15 @@ pub(crate) async fn fetch_oauth_channel_model_definitions(
     config: &GuiConfigFile,
     channel: &str,
 ) -> Result<Vec<CodexModelDefinition>, String> {
+    fetch_oauth_channel_model_definitions_with_protocol(config, channel)
+        .await
+        .map(|(models, _)| models)
+}
+
+pub(crate) async fn fetch_oauth_channel_model_definitions_with_protocol(
+    config: &GuiConfigFile,
+    channel: &str,
+) -> Result<(Vec<CodexModelDefinition>, String), String> {
     let client = management_http_client()?;
     let response = client
         .get(management_endpoint(
@@ -1678,7 +1670,134 @@ pub(crate) async fn fetch_oauth_channel_model_definitions(
             format_management_request_error(&format!("Failed to read {channel} OAuth model definition"), &error)
         })?;
     let payload = read_management_value(response).await?;
-    parse_codex_model_definitions(&payload)
+    let protocol = oauth_channel_protocol_hint(&payload, channel);
+    Ok((parse_codex_model_definitions(&payload)?, protocol))
+}
+
+pub(crate) fn oauth_channel_protocol_hint(payload: &serde_json::Value, channel: &str) -> String {
+    let gemini_native = payload
+        .get("models")
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|models| {
+            models.iter().any(|model| {
+                model
+                    .get("supportedGenerationMethods")
+                    .or_else(|| model.get("supported_generation_methods"))
+                    .and_then(serde_json::Value::as_array)
+                    .is_some_and(|methods| {
+                        methods.iter().any(|method| {
+                            method
+                                .as_str()
+                                .is_some_and(|method| method.eq_ignore_ascii_case("generateContent"))
+                        })
+                    })
+            })
+        });
+    if gemini_native {
+        return "gemini".to_string();
+    }
+    let channel = channel.to_ascii_lowercase();
+    if channel.contains("claude") {
+        "claude".to_string()
+    } else if channel.contains("codex") {
+        "codex".to_string()
+    } else {
+        "openai".to_string()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PluginOAuthAliasProvider {
+    pub(crate) provider: String,
+    pub(crate) name: String,
+}
+
+pub(crate) async fn fetch_plugin_oauth_alias_channels(
+    config: &GuiConfigFile,
+) -> Vec<PluginOAuthAliasProvider> {
+    let Ok(client) = management_http_client() else {
+        return Vec::new();
+    };
+    let Ok(endpoint) = management_endpoint(config, "plugins") else {
+        return Vec::new();
+    };
+    let Ok(authorization) = management_authorization(config) else {
+        return Vec::new();
+    };
+    let Ok(response) = client
+        .get(endpoint)
+        .header("Authorization", authorization)
+        .header(reqwest::header::ACCEPT, "application/json")
+        .send()
+        .await
+    else {
+        return Vec::new();
+    };
+    let Ok(payload) = read_management_value(response).await else {
+        return Vec::new();
+    };
+    let Some(plugins) = payload.get("plugins").and_then(serde_json::Value::as_array) else {
+        return Vec::new();
+    };
+    let read_bool = |plugin: &serde_json::Value, keys: &[&str]| -> Option<bool> {
+        keys.iter()
+            .find_map(|key| plugin.get(*key).and_then(serde_json::Value::as_bool))
+    };
+    let mut providers: Vec<PluginOAuthAliasProvider> = Vec::new();
+    for plugin in plugins {
+        if read_bool(plugin, &["registered"]) != Some(true)
+            || read_bool(plugin, &["enabled", "effective_enabled", "effectiveEnabled"]) == Some(false)
+            || read_bool(plugin, &["supports_oauth", "supportsOAuth"]) != Some(true)
+        {
+            continue;
+        }
+        let name = plugin
+            .get("metadata")
+            .and_then(|metadata| metadata.get("name"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+            .or_else(|| plugin.get("id").and_then(serde_json::Value::as_str).map(str::to_string))
+            .unwrap_or_default();
+        let mut keys = Vec::new();
+        if let Some(list) = plugin
+            .get("oauth_providers")
+            .or_else(|| plugin.get("oauthProviders"))
+            .and_then(serde_json::Value::as_array)
+        {
+            keys.extend(
+                list.iter()
+                    .filter_map(serde_json::Value::as_str)
+                    .map(str::to_string),
+            );
+        }
+        if keys.is_empty() {
+            if let Some(primary) = plugin
+                .get("oauth_provider")
+                .or_else(|| plugin.get("oauthProvider"))
+                .and_then(serde_json::Value::as_str)
+            {
+                keys.push(primary.to_string());
+            }
+        }
+        for key in keys {
+            let Some(provider) = normalize_plugin_oauth_alias_channel_key(&key) else {
+                continue;
+            };
+            if providers
+                .iter()
+                .any(|existing| existing.provider == provider)
+            {
+                continue;
+            }
+            providers.push(PluginOAuthAliasProvider {
+                provider,
+                name: name.clone(),
+            });
+        }
+    }
+    providers
 }
 
 pub(crate) async fn fetch_oauth_model_definitions(
@@ -1686,16 +1805,46 @@ pub(crate) async fn fetch_oauth_model_definitions(
 ) -> Vec<OAuthModelDefinitions> {
     let active_channels = fetch_active_oauth_alias_channels(config).await.ok();
     let mut definitions = Vec::new();
-    for channel in OAUTH_ALIAS_CHANNELS {
+    for channel in oauth_alias_channels() {
         if active_channels
             .as_ref()
-            .is_some_and(|active| !active.contains(channel.key))
+            .is_some_and(|active| !active.contains(&channel.key))
         {
             continue;
         }
-        if let Ok(models) = fetch_oauth_channel_model_definitions(config, channel.key).await {
-            definitions.push(OAuthModelDefinitions { channel, models });
+        if let Ok((models, protocol)) =
+            fetch_oauth_channel_model_definitions_with_protocol(config, &channel.key).await
+        {
+            definitions.push(OAuthModelDefinitions {
+                channel: OAuthAliasChannel { protocol, ..channel },
+                models,
+            });
         }
+    }
+    for plugin in fetch_plugin_oauth_alias_channels(config).await {
+        if definitions
+            .iter()
+            .any(|definition| definition.channel.key.eq_ignore_ascii_case(&plugin.provider))
+        {
+            continue;
+        }
+        let Ok((models, protocol)) =
+            fetch_oauth_channel_model_definitions_with_protocol(config, &plugin.provider).await
+        else {
+            continue;
+        };
+        definitions.push(OAuthModelDefinitions {
+            channel: OAuthAliasChannel {
+                key: plugin.provider.clone(),
+                provider: plugin.name,
+                kind: format!("{}-oauth", plugin.provider),
+                protocol,
+                supports_reasoning: true,
+                supports_fast: false,
+                force_mapping: false,
+            },
+            models,
+        });
     }
     definitions
 }
@@ -1755,9 +1904,8 @@ pub(crate) fn codex_oauth_definition_set(
     definitions: &[CodexModelDefinition],
 ) -> Vec<OAuthModelDefinitions> {
     vec![OAuthModelDefinitions {
-        channel: OAUTH_ALIAS_CHANNELS
-            .iter()
-            .copied()
+        channel: oauth_alias_channels()
+            .into_iter()
             .find(|channel| channel.key == "codex")
             .expect("codex OAuth alias channel must exist"),
         models: definitions.to_vec(),
@@ -1825,7 +1973,7 @@ pub(crate) fn resolved_oauth_alias_sources(
         .map(|source| source.source.model.to_ascii_lowercase())
         .collect::<std::collections::HashSet<_>>();
     for definition_set in definition_sets {
-        let channel = definition_set.channel;
+        let channel = &definition_set.channel;
         let supports_capability = match capability {
             AliasSourceCapability::Base => true,
             AliasSourceCapability::Reasoning => channel.supports_reasoning,
@@ -1839,31 +1987,64 @@ pub(crate) fn resolved_oauth_alias_sources(
                 .models
                 .iter()
                 .filter(|definition| {
-                    (capability != AliasSourceCapability::Reasoning
-                        || !definition.reasoning_levels.is_empty())
-                        && thinking_alias_model_is_available(available_models, &definition.id)
-                        && (channel.key != "codex"
-                            || !configured_codex_api_models
-                                .contains(&definition.id.to_ascii_lowercase()))
+                    capability != AliasSourceCapability::Reasoning
+                        || !definition.reasoning_levels.is_empty()
                 })
-                .map(|definition| ResolvedThinkingAliasSource {
-                    source: ThinkingAliasSource {
-                        id: format!("{}:{}", channel.kind, definition.id),
-                        model: definition.id.clone(),
-                        display_name: definition.display_name.clone(),
-                        provider: channel.provider.to_string(),
-                        kind: channel.kind.to_string(),
-                        protocol: channel.protocol.to_string(),
-                        reasoning_levels: definition.reasoning_levels.clone(),
-                    },
-                    location: ThinkingAliasSourceLocation::Oauth {
-                        channel: channel.key,
-                        force_mapping: channel.force_mapping,
-                    },
+                .filter_map(|definition| {
+                    let model =
+                        resolve_oauth_definition_model_name(available_models, &definition.id)?;
+                    if channel.key.as_str() == "codex"
+                        && configured_codex_api_models
+                            .contains(&definition.id.to_ascii_lowercase())
+                    {
+                        return None;
+                    }
+                    Some(ResolvedThinkingAliasSource {
+                        source: ThinkingAliasSource {
+                            id: format!("{}:{}", channel.kind, model),
+                            model,
+                            display_name: definition.display_name.clone(),
+                            provider: channel.provider.to_string(),
+                            kind: channel.kind.to_string(),
+                            protocol: channel.protocol.to_string(),
+                            reasoning_levels: definition.reasoning_levels.clone(),
+                        },
+                        location: ThinkingAliasSourceLocation::Oauth {
+                            channel: channel.key.clone(),
+                            force_mapping: channel.force_mapping,
+                        },
+                    })
                 }),
         );
     }
     Ok(sources)
+}
+
+/// Resolve the model id the core actually advertises for an OAuth model definition.
+/// Plugin definitions may keep a routing prefix (for example `step2api/step-5-preview`)
+/// while `/v1/models` lists the unprefixed id.
+pub(crate) fn resolve_oauth_definition_model_name(
+    available_models: &[AgentModelOption],
+    definition_id: &str,
+) -> Option<String> {
+    let definition_id = definition_id.trim();
+    if let Some(exact) = available_models
+        .iter()
+        .find(|available| available.name.eq_ignore_ascii_case(definition_id))
+    {
+        return Some(exact.name.clone());
+    }
+    let Some((_, unprefixed)) = definition_id.split_once('/') else {
+        return None;
+    };
+    let unprefixed = unprefixed.trim();
+    if unprefixed.is_empty() || unprefixed.eq_ignore_ascii_case(definition_id) {
+        return None;
+    }
+    available_models
+        .iter()
+        .find(|available| available.name.eq_ignore_ascii_case(unprefixed))
+        .map(|available| available.name.clone())
 }
 
 pub(crate) fn thinking_alias_model_is_available(
@@ -1877,7 +2058,7 @@ pub(crate) fn thinking_alias_model_is_available(
 
 pub(crate) fn alias_source_supports_fast(source: &ResolvedThinkingAliasSource) -> bool {
     match &source.location {
-        ThinkingAliasSourceLocation::Oauth { channel, .. } => *channel == "codex",
+        ThinkingAliasSourceLocation::Oauth { channel, .. } => channel.as_str() == "codex",
         ThinkingAliasSourceLocation::ConfigModel { section, .. } => {
             matches!(*section, "codex-api-key" | "openai-compatibility")
         }
