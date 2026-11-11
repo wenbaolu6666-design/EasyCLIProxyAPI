@@ -83,9 +83,9 @@ fn editable_model_alias_for_mapping(
             let channel = entry.oauth_channel.as_deref().and_then(oauth_alias_channel)
                 .ok_or("Unknown OAuth alias channel")?;
             let models = root.get(yaml_key("oauth-model-alias"))
-                .and_then(|channels| channels.get(channel.key));
+                .and_then(|channels| channels.get(channel.key.as_str()));
             (models, ThinkingAliasSourceLocation::Oauth {
-                channel: channel.key, force_mapping: channel.force_mapping,
+                channel: channel.key.clone(), force_mapping: channel.force_mapping,
             }, channel.provider.to_string(), channel.kind.to_string(), channel.protocol.to_string())
         } else {
             let (section, fallback, kind, protocol) = [
@@ -246,7 +246,7 @@ fn editable_model_alias_for_mapping(
                             reasoning_levels: Vec::new(),
                         },
                         location: ThinkingAliasSourceLocation::Oauth {
-                            channel: channel.key,
+                            channel: channel.key.clone(),
                             force_mapping: channel.force_mapping,
                         },
                     },
@@ -283,10 +283,10 @@ pub(crate) fn resolve_model_alias_edit_source_for_mapping(
         .as_mapping()
         .ok_or("Kernel configuration root must be a YAML mapping")?;
     let mut source = editable_model_alias_for_mapping(root, alias, entry)?.source;
-    if let ThinkingAliasSourceLocation::Oauth { channel, .. } = source.location {
+    if let ThinkingAliasSourceLocation::Oauth { channel, .. } = &source.location {
         if let Some(model) = definitions
             .iter()
-            .filter(|set| set.channel.key == channel && set.channel.supports_reasoning)
+            .filter(|set| set.channel.key.as_str() == channel.as_str() && set.channel.supports_reasoning)
             .flat_map(|set| &set.models)
             .find(|model| model.id.eq_ignore_ascii_case(&source.source.model))
         {

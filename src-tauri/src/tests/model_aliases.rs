@@ -31,7 +31,7 @@ fn test_oauth_thinking_source(channel: &str, model: &str) -> ResolvedThinkingAli
             reasoning_levels: vec!["low".to_string(), "high".to_string()],
         },
         location: ThinkingAliasSourceLocation::Oauth {
-            channel: channel.key,
+            channel: channel.key.clone(),
             force_mapping: channel.force_mapping,
         },
     }
@@ -900,4 +900,63 @@ fn ultrafast_alias_edits_raw_tier_without_changing_unrelated_params() {
     let value: serde_json::Value = serde_norway::from_str(&updated).unwrap();
     assert_eq!(value["payload"]["override-raw"][0]["params"]["service_tier"], "\"ultrafast\"");
     assert_eq!(value["payload"]["override-raw"][0]["params"]["temperature"], "0.2");
+}
+
+#[test]
+fn plugin_oauth_providers_are_alias_channels() {
+    let channel = oauth_alias_channel("aistudio2api").expect("plugin channel");
+    assert_eq!(channel.key, "aistudio2api");
+    assert_eq!(channel.kind, "aistudio2api-oauth");
+    assert_eq!(normalize_plugin_oauth_alias_channel_key("AIStudio2API"), Some("aistudio2api".to_string()));
+    assert_eq!(normalize_plugin_oauth_alias_channel_key("step2api"), Some("step2api".to_string()));
+    assert_eq!(normalize_plugin_oauth_alias_channel_key("codex"), None);
+    assert_eq!(normalize_plugin_oauth_alias_channel_key("bad key"), None);
+    assert_eq!(normalize_plugin_oauth_alias_channel_key("gemini"), None);
+}
+
+#[test]
+fn plugin_oauth_alias_sources_are_resolved_and_writable() {
+    let definitions = test_oauth_definition_set("aistudio2api", &["gemini-3.1-flash-image"]);
+    let sources = resolved_oauth_alias_sources(
+        "{}\n",
+        &[definitions],
+        &test_agent_models(&["gemini-3.1-flash-image"]),
+        AliasSourceCapability::Base,
+    )
+    .unwrap();
+    assert_eq!(sources.len(), 1);
+    assert_eq!(sources[0].source.kind, "aistudio2api-oauth");
+    let updated = add_model_alias_to_yaml("{}\n", &sources[0], "ai-image", "", false).unwrap();
+    assert!(updated.contains("aistudio2api:"), "unexpected config: {updated}");
+    assert!(updated.contains("name: gemini-3.1-flash-image"), "unexpected config: {updated}");
+    assert!(updated.contains("alias: ai-image"), "unexpected config: {updated}");
+}
+
+#[test]
+fn plugin_model_definitions_infer_protocol() {
+    let gemini = serde_json::json!({
+        "models": [{"supportedGenerationMethods": ["generateContent", "countTokens"]}]
+    });
+    assert_eq!(oauth_channel_protocol_hint(&gemini, "aistudio2api"), "gemini");
+    let openai = serde_json::json!({"models": [{"id": "step-5-preview"}]});
+    assert_eq!(oauth_channel_protocol_hint(&openai, "step2api"), "openai");
+    assert_eq!(oauth_channel_protocol_hint(&openai, "claude-plugin"), "claude");
+}
+
+#[test]
+fn plugin_prefixed_model_ids_match_advertised_models() {
+    let definitions = test_oauth_definition_set("step2api", &["step2api/step-5-preview"]);
+    let sources = resolved_oauth_alias_sources(
+        "{}\n",
+        &[definitions],
+        &test_agent_models(&["step-5-preview"]),
+        AliasSourceCapability::Base,
+    )
+    .unwrap();
+    assert_eq!(sources.len(), 1);
+    assert_eq!(sources[0].source.model, "step-5-preview");
+    assert_eq!(sources[0].source.kind, "step2api-oauth");
+    let updated = add_model_alias_to_yaml("{}\n", &sources[0], "step-fast", "", false).unwrap();
+    assert!(updated.contains("step2api:"), "unexpected config: {updated}");
+    assert!(updated.contains("name: step-5-preview"), "unexpected config: {updated}");
 }
