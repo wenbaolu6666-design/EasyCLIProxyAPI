@@ -135,7 +135,7 @@ export const uniqueModelAlias = (
   return candidate;
 };
 
-export const thinkingAliasSourceKindLabel = (kind: string) => {
+export const thinkingAliasSourceKindLabel = (kind: string, provider = '') => {
   if (kind === 'codex-oauth') return 'Codex OAuth';
   if (kind === 'antigravity-oauth') return 'Antigravity OAuth';
   if (kind === 'claude-oauth') return 'Claude OAuth';
@@ -148,11 +148,11 @@ export const thinkingAliasSourceKindLabel = (kind: string) => {
   if (kind === 'claude-api') return 'Claude API';
   if (kind === 'gemini-api') return 'Gemini API';
   if (kind === 'openai-compatible') return translate(getCurrentLocale(), 'aliases.source.openAiCompatible');
-  return translate(getCurrentLocale(), 'aliases.source.other');
+  return provider.trim() || translate(getCurrentLocale(), 'aliases.source.other');
 };
 
 const thinkingAliasProviderDetail = (kind: string, provider: string) => (
-  provider === thinkingAliasSourceKindLabel(kind)
+  provider === thinkingAliasSourceKindLabel(kind, provider)
     ? translate(getCurrentLocale(), 'aliases.source.available')
     : provider
 );
@@ -281,7 +281,7 @@ export function ThinkingAliasesPage({ embedded = false }: { embedded?: boolean }
       .map((source, index) => {
         const model = source.model.toLowerCase();
         const displayName = (source.displayName ?? '').toLowerCase();
-        const haystack = `${model} ${displayName} ${source.provider} ${thinkingAliasSourceKindLabel(source.kind)}`
+        const haystack = `${model} ${displayName} ${source.provider} ${thinkingAliasSourceKindLabel(source.kind, source.provider)}`
           .toLowerCase();
         let score = 5;
         if (model === query) score = 0;
@@ -621,7 +621,7 @@ export function ThinkingAliasesPage({ embedded = false }: { embedded?: boolean }
               />
               {!modelPickerOpen && selectedSource ? (
                 <span className="thinking-source-kind">
-                  {thinkingAliasSourceKindLabel(selectedSource.kind)}
+                  {thinkingAliasSourceKindLabel(selectedSource.kind, selectedSource.provider)}
                 </span>
               ) : null}
             </div>
@@ -659,7 +659,7 @@ export function ThinkingAliasesPage({ embedded = false }: { embedded?: boolean }
                             : null}
                         </span>
                         <span className="thinking-model-source">
-                          <em>{thinkingAliasSourceKindLabel(source.kind)}</em>
+                          <em>{thinkingAliasSourceKindLabel(source.kind, source.provider)}</em>
                           <small title={thinkingAliasSourceDetail(source)}>
                             {thinkingAliasSourceDetail(source)}
                           </small>
@@ -674,7 +674,7 @@ export function ThinkingAliasesPage({ embedded = false }: { embedded?: boolean }
           </div>
           {selectedSource ? (
             <div className="thinking-model-selection">
-              <span>{thinkingAliasSourceKindLabel(selectedSource.kind)}</span>
+              <span>{thinkingAliasSourceKindLabel(selectedSource.kind, selectedSource.provider)}</span>
               <strong title={thinkingAliasSourceDetail(selectedSource)}>
                 {t('aliases.sourceLabel', { source: thinkingAliasSourceDetail(selectedSource) })}
               </strong>
@@ -807,7 +807,7 @@ export function ThinkingAliasesPage({ embedded = false }: { embedded?: boolean }
                   <div className="thinking-alias-route-source">
                     <span title={entry.sourceModel}>{entry.sourceModel}</span>
                     <small>
-                      <em>{thinkingAliasSourceKindLabel(entry.kind)}</em>
+                      <em>{thinkingAliasSourceKindLabel(entry.kind, entry.provider)}</em>
                       <span title={thinkingAliasProviderDetail(entry.kind, entry.provider)}>
                         {thinkingAliasProviderDetail(entry.kind, entry.provider)}
                       </span>
